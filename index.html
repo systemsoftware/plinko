@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Plinko Game</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.14.2/matter.min.js"></script>
+    <style>
+      .bucket {
+        width: 100px;
+        height: 20px;
+        background-color: #3498db;
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        border-radius: 5px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+      }
+
+      .bucket::before {
+        content: "";
+        position: absolute;
+        top: -10px;
+        left: 50%;
+        margin-left: -5px;
+        width: 10px;
+        height: 10px;
+        background-color: #3498db;
+      }
+      .bucket::after {
+        content: "";
+        position: absolute;
+        top: -20px;
+        left: 50%;
+        margin-left: -5px;
+        width: 10px;
+        height: 10px;
+        background-color: #3498db;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+      }
+
+      body,
+      html,
+      canvas {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        height: 100%;
+      }
+
+      #score {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        font-family: Arial, sans-serif;
+        font-size: 20px;
+        color: white;
+      }
+
+      #bestscore {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        font-family: Arial, sans-serif;
+        font-size: 20px;
+        color: white;
+      }
+
+      #reset {
+        padding: 5px 10px;
+        font-size: 16px;
+        background-color: #e74c3c;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        margin-left: 10px;
+      }
+
+      * {
+        user-select: none;
+        --webkit-user-select: none; /* for Safari */
+        -moz-user-select: none; /* for Firefox */
+        -ms-user-select: none; /* for IE10+ */
+        -khtml-user-select: none; /* for older browsers */
+      }
+
+      button {
+        padding: 5px 10px;
+        font-size: 16px;
+        background-color: #3498db;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        margin-top: 10px;
+      }
+
+      .dummy-ball {
+        position: absolute;
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+        background-color: rgba(231, 76, 60, 0.7);
+        pointer-events: none;
+        box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+        transform: translate(-50%, -50%);
+        z-index: 1000;
+        transition: opacity 0.2s;
+      }
+
+      .popup {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+
+        background: rgba(0, 0, 0, 0.6); /* semi-transparent dark bg */
+        padding: 20px 30px;
+        border-radius: 12px;
+        color: #fff;
+        font-size: 1.5rem;
+        font-family: sans-serif;
+        text-align: center;
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25);
+        z-index: 999;
+        display: none;
+      }
+
+      #alert {
+        animation: fadeInOut 2s ease-in-out;
+        pointer-events: none;
+      }
+
+      @keyframes fadeInOut {
+        0% {
+          opacity: 0;
+          transform: translate(-50%, -45%);
+        }
+        10% {
+          opacity: 1;
+          transform: translate(-50%, -50%);
+        }
+        90% {
+          opacity: 1;
+          transform: translate(-50%, -50%);
+        }
+        100% {
+          opacity: 0;
+          transform: translate(-50%, -55%);
+        }
+      }
+
+      .settings {
+        background-color: gray;
+        width: 50%;
+      }
+
+      .settings * {
+        text-align: center !important;
+      }
+
+      .settings button,
+      .settings input {
+        width: 50%;
+        display: inline-block; /* To ensure the buttons and inputs align properly */
+      }
+
+      .settings h2 {
+        margin: 0;
+        padding: 10px 0;
+        text-align: center;
+        font-size: 24px;
+        color: white;
+      }
+
+      .settings h3 {
+        margin: 10px 0 5px 0;
+        padding: 0;
+        font-size: 20px;
+        color: white;
+        text-align: left;
+      }
+
+      input {
+        font-size: 16px;
+        padding: 2px;
+        border-radius: 5px;
+        border: 1px solid #ccc;
+      }
+
+      .x {
+        height: 50px;
+        width: 50px;
+        position: absolute;
+        top: -10px;
+        width: 50px !important;
+        border-top-left-radius: 0;
+        border-bottom-right-radius: 0;
+        right: 0px;
+        background-color: #e74c3c;
+      }
+
+      .x:hover {
+        background-color: #c0392b;
+        cursor: pointer;
+      }
+    </style>
+
+    <label id="score"> Money: <span id="score-value"></span></label>
+    <button
+      id="allIn"
+      style="position: fixed; top: 30px; left: 10px"
+      onclick="releasePlinkoBall(window.innerWidth / 2, 50, score);"
+    >
+      All In
+    </button>
+    <button
+      id="50in"
+      style="position: fixed; top: 65px; left: 10px"
+      onclick="releasePlinkoBall(window.innerWidth / 2, 50, score/2);"
+    >
+      50% In
+    </button>
+    <label id="bestscore">
+      <button
+        id="settingsbutton"
+        onclick="document.getElementById('settings').style.display=='block' ? document.getElementById('settings').style.display='none' : document.getElementById('settings').style.display='block';"
+      >
+        ⚙️
+      </button>
+    </label>
+
+    <div
+      class="settings popup"
+      id="settings"
+      style="height: 50%; overflow: scroll"
+    >
+      <h2>Settings</h2>
+      <h3>Ball Value</h3>
+      <input type="number" id="ball-worth" value="10" />
+      <h3 style="margin-top: 10px">Map Shape</h3>
+      <p id="customInstruction" style="font-size: 12px; display: none">
+        Right click on the canvas to add pegs and left click to remove them.
+        Custom pegs will not save on refresh.
+      </p>
+      <select
+        id="type-select"
+        style="
+          width: 50%;
+          padding: 5px;
+          border-radius: 5px;
+          border: 1px solid #ccc;
+          font-size: 16px;
+        "
+      >
+        <option value="rect" selected>Rectangle</option>
+        <option value="random-rect">Random Rectangle</option>
+        <option value="moving-rect">Moving Rectangle</option>
+        <option value="triangle">Triangle</option>
+        <option value="invert-triangle">Inverted Triangle</option>
+        <option value="diamond">Diamond</option>
+        <option value="circle">Circle</option>
+        <option value="custom">Custom</option>
+      </select>
+      <h3 style="margin-top: 20px">Ball Sides</h3>
+      <input value="0" type="number" id="ball-sides" />
+      <h3 style="margin-top: 20px">Bucket Count</h3>
+      <p style="font-size: 15px">Must be an odd number</p>
+      <input
+        value="0"
+        type="number"
+        id="buckets"
+        onchange=" 
+          let val = parseInt(this.value); 
+          if(isNaN(val) || val < 0 || val % 2 == 0 || val > 25) { 
+            this.value = 5; 
+            alert('Please enter an odd number greater than or equal to 3.'); 
+          } else { 
+            localStorage.setItem('buckets', val);
+            location.reload(); 
+          }"
+      />
+      <h3>Mouse Control</h3>
+      <input
+        type="checkbox"
+        id="nosel"
+        style="margin-right: 5px; width: fit-content !important"
+        onclick="nosel = !nosel; localStorage.setItem('nosel', nosel);"
+      />
+      <label for="nosel" style="color: white; font-size: 16px"
+        >Use mouse x position for ball drop</label
+      >
+      <h3>Allow Negative</h3>
+      <input
+        type="checkbox"
+        checked
+        id="allowNeg"
+        style="margin-right: 5px; width: fit-content !important"
+        onclick="allowNeg = !allowNeg; localStorage.setItem('allowNeg', nosel);"
+      />
+      <label for="allowNeg" style="color: white; font-size: 16px"
+        >Allow yourself to go in the negative</label
+      >
+      <h3>Ball Restitution (Bounciness)</h3>
+      <input
+        value="1"
+        type="number"
+        step="0.1"
+        id="restitution"
+        onchange="localStorage.setItem('restitution', this.value);"
+      />
+      <h3 style="margin-top: 10px">Reset Everything</h3>
+      <button id="reset" onclick="resetGame()">Reset</button>
+      <br /><br />
+      <h3 style="margin-top: 10px">
+        Best: <span id="best-score-value"></span>
+      </h3>
+
+      <button
+        class="x"
+        onclick="document.getElementById('settings').style.display='none';"
+      >
+        &#x2715;
+      </button>
+    </div>
+
+    <div class="popup" id="alert">
+      <div class="popup-content"></div>
+    </div>
+
+    <script>
+      let engine,
+        render,
+        ground,
+        score,
+        bestScore,
+        dummyBall = null;
+      let canDrop = true;
+
+      score = parseInt(localStorage.getItem("score")) || 1000;
+
+      const scoreColors = [
+        { min: 0, max: 50, color: "red" },
+        { min: 51, max: 100, color: "orange" },
+        { min: 101, max: 150, color: "yellow" },
+        { min: 151, max: 200, color: "limegreen" },
+        { min: 201, max: 250, color: "green" },
+        { min: 251, max: 300, color: "turquoise" },
+        { min: 301, max: 350, color: "dodgerblue" },
+        { min: 351, max: 400, color: "blueviolet" },
+        { min: 401, max: 450, color: "purple" },
+        { min: 451, max: Infinity, color: "gold" },
+      ];
+
+      function getColorForScore(_score) {
+        if (_score == score) return;
+        const match = scoreColors.find(
+          (r) => _score >= r.min && _score <= r.max
+        );
+        return match ? match.color : "white";
+      }
+
+      function addCommas(number) {
+        if (typeof number !== "number") return number;
+        return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      }
+
+      function generateSymmetricVals(bucketCount) {
+        if (bucketCount < 2) return [0.5];
+
+        const half = Math.floor(bucketCount / 2);
+        const ascending = [];
+
+        for (let i = 0; i <= half; i++) {
+          if (i === 0) {
+            ascending.push(0.5);
+          } else {
+            ascending.push(i);
+          }
+        }
+
+        const descending = ascending
+          .slice(0, bucketCount % 2 === 0 ? half : half)
+          .reverse();
+        return ascending.concat(descending);
+      }
+
+      const params = new URLSearchParams(window.location.search);
+
+      document.getElementById("restitution").value =
+        localStorage.getItem("restitution") || 1;
+
+      let bucketCount = parseInt(localStorage.getItem("buckets")) || 5;
+      if (bucketCount % 2 == 0) bucketCount++;
+      let vals = generateSymmetricVals(bucketCount);
+      console.log(vals);
+      let bucketWidth, bucketSpacing, width, height;
+
+      document.getElementById("buckets").value = bucketCount; // Set the initial value of the buckets input
+
+      function setupPlinko() {
+        const { Engine, Render, Runner, World, Bodies, Events } = Matter;
+
+        width = window.innerWidth;
+        height = window.innerHeight;
+
+        engine = Engine.create();
+        render = Render.create({
+          element: document.body,
+          engine: engine,
+          options: {
+            width,
+            height,
+            wireframes: false,
+            background: "#111",
+          },
+        });
+
+        Render.run(render);
+        Runner.run(engine);
+
+        // Init Score
+        bestScore = parseInt(localStorage.getItem("bestScore")) || score;
+
+        let type = params.get("type");
+
+        let nosel = localStorage.getItem("nosel") === "true" || false;
+
+        let allowNeg = localStorage.getItem("allowNeg") === "true" || true;
+
+        document.getElementById("type-select").value =
+          type &&
+          [
+            "rect",
+            "random-rect",
+            "triangle",
+            "diamond",
+            "circle",
+            "custom",
+            "moving-rect",
+            "invert-triangle",
+          ].includes(type)
+            ? type
+            : "rect";
+
+        document.getElementById("type-select").onchange = () => {
+          const selectedtype = document.getElementById("type-select").value;
+          const newParams = new URLSearchParams(window.location.search);
+          newParams.set("type", selectedtype);
+          if (selectedtype === "custom") {
+            alert(
+              "Right click on the canvas to add pegs and left click to remove them. Custom pegs will not save on refresh."
+            );
+          }
+          window.location.search = newParams.toString();
+        };
+
+        if (params.get("type") === "custom") {
+          // Show custom instructions for adding pegs
+          document.getElementById("customInstruction").style.display = "block";
+        } else {
+          document.getElementById("customInstruction").style.display = "none";
+        }
+
+        document.getElementById("nosel").onchange = (e) => {
+          nosel = e.target.checked;
+          localStorage.setItem("nosel", nosel);
+        };
+
+        document.getElementById("ball-sides").onchange = (e) => {
+          const val = parseInt(e.target.value);
+          if (isNaN(val) || val < 0 || val > 12) {
+            e.target.value = 0; // reset to default
+            alert("Please enter a valid number of sides between 0 and 12.");
+          } else {
+            localStorage.setItem("ballSides", val);
+          }
+        };
+
+        document.getElementById("ball-worth").onchange = (e) => {
+          const val = parseInt(e.target.value);
+          if (isNaN(val) || val <= 0) {
+            e.target.value = 10;
+            alert("Please enter a valid ball worth greater than 0.");
+          } else {
+            localStorage.setItem("ballWorth", val);
+          }
+        };
+
+        document.getElementById("ball-worth").value =
+          localStorage.getItem("ballWorth") || 10;
+        document.getElementById("ball-sides").value =
+          localStorage.getItem("ballSides") || 0;
+
+        document.getElementById("score-value").innerText = addCommas(score);
+        document.getElementById("best-score-value").innerText =
+          addCommas(bestScore);
+
+        if (params.get("worth")) {
+          document.getElementById("ball-worth").value = params.get("worth");
+        }
+
+        // Ground
+        ground = Bodies.rectangle(width / 2, height + 30, width, 60, {
+          isStatic: true,
+          label: "ground",
+        });
+        World.add(engine.world, ground);
+
+        // Add walls on the left and right sides
+        const wallThickness = 500;
+
+        // Left wall
+        const leftWall = Bodies.rectangle(
+          -wallThickness / 2,
+          height / 2,
+          wallThickness,
+          height * 2,
+          {
+            isStatic: true,
+            render: { fillStyle: "#222" },
+            label: "leftWall",
+          }
+        );
+
+        // Right wall
+        const rightWall = Bodies.rectangle(
+          width + wallThickness / 2,
+          height / 2,
+          wallThickness,
+          height * 2,
+          {
+            isStatic: true,
+            render: { fillStyle: "#222" },
+            label: "rightWall",
+          }
+        );
+
+        const topWallThickness = 500; // Thickness of the top wall
+        const topWall = Bodies.rectangle(
+          width / 2,
+          -topWallThickness / 2, // Position it above the canvas
+          width,
+          topWallThickness,
+          {
+            isStatic: true,
+            render: { fillStyle: "#222" },
+            label: "topWall",
+          }
+        );
+
+        // Add walls to the world
+        World.add(engine.world, [leftWall, rightWall, topWall]);
+
+        const mouse = Matter.Mouse.create(render.canvas);
+        const mouseConstraint = Matter.MouseConstraint.create(engine, {
+          mouse: mouse,
+          constraint: {
+            stiffness: 0.2,
+            render: {
+              visible: false,
+            },
+          },
+        });
+        World.add(engine.world, mouseConstraint);
+
+        if (type == "custom") {
+          Events.on(mouseConstraint, "mousedown", function (event) {
+            if (event.mouse.button !== 0) return;
+            const mousePosition = event.mouse.position;
+            const clickedBodies = Matter.Query.point(
+              engine.world.bodies,
+              mousePosition
+            );
+
+            if (clickedBodies.length > 0) {
+              const clickedBody = clickedBodies[0];
+              if (clickedBody.label == "cpeg") {
+                Matter.World.remove(engine.world, clickedBody);
+              }
+            }
+          });
+        }
+
+        // Buckets
+        bucketWidth = width / (bucketCount + 2);
+        bucketSpacing = (width - bucketCount * bucketWidth) / (bucketCount + 1);
+
+        for (let i = 0; i < bucketCount; i++) {
+          const x = bucketSpacing * (i + 1) + bucketWidth * i + bucketWidth / 2;
+          const y = height - 20;
+
+          const bucket = Bodies.rectangle(x, y, bucketWidth, 20, {
+            isStatic: true,
+            render: { fillStyle: "#3498db" },
+            label: `bucket${i}`,
+          });
+
+          const label = document.createElement("div");
+          label.className = "bucket-label";
+          label.innerText = `${vals[i]}x`;
+          label.style.position = "absolute";
+          label.style.left = `${x - bucketWidth / 2}px`;
+          label.style.top = `${y - 8}px`;
+          label.style.width = `${bucketWidth}px`;
+          label.style.textAlign = "center";
+          label.style.color = "white";
+          label.style.fontFamily = "sans-serif";
+          label.style.fontSize = "14px";
+          label.style.pointerEvents = "none";
+          document.body.appendChild(label);
+
+          World.add(engine.world, bucket);
+        }
+
+        // Pegs
+        const pegRadius = Math.max(5, Math.min(12, width / 100));
+        const centerX = width / 2;
+        const centerY = height / 2;
+
+        type = type || "rect";
+
+        if (type === "random-rect") {
+          const rows = 14,
+            cols = 13;
+          const vSpacing = height / (rows + 4);
+          const hSpacing = width / (cols + 1.5);
+
+          for (let row = 0; row < rows; row++) {
+            let rowOffset = row % 2 === 0 ? hSpacing / 2 : 0;
+
+            for (let col = 0; col < cols; col++) {
+              const randomOffset =
+                (Math.random() * hSpacing) / 4 - hSpacing / 8;
+              const x = hSpacing * (col + 1) + rowOffset + randomOffset;
+              const verticalOffset =
+                (Math.random() * vSpacing) / 5 - vSpacing / 10;
+              const y = vSpacing * row + 80 + verticalOffset;
+
+              if (x > pegRadius * 3 && x < width - pegRadius * 3) {
+                const peg = Bodies.circle(x, y, pegRadius - Math.random() * 2, {
+                  isStatic: true,
+                  render: { fillStyle: "#95a5a6" },
+                  label: "peg",
+                });
+
+                World.add(engine.world, peg);
+              }
+            }
+          }
+        } else if (type === "triangle") {
+          const rows = 14;
+          const vSpacing = height / (rows + 4);
+          const hSpacing = width / (rows + 1);
+
+          for (let row = 0; row < rows; row++) {
+            const pegsInRow = row + 1;
+            const rowWidth = hSpacing * pegsInRow;
+            const startX = (width - rowWidth) / 2 + hSpacing / 2;
+            const y = vSpacing * row + 80;
+
+            for (let col = 0; col < pegsInRow; col++) {
+              const x = startX + col * hSpacing;
+
+              const peg = Bodies.circle(x, y, pegRadius, {
+                isStatic: true,
+                render: { fillStyle: "#95a5a6" },
+                label: "peg",
+              });
+
+              World.add(engine.world, peg);
+            }
+          }
+        } else if (type === "invert-triangle") {
+          const rows = 14;
+          const vSpacing = height / (rows + 4);
+          const hSpacing = width / (rows + 1);
+
+          for (let row = 0; row < rows; row++) {
+            const pegsInRow = rows - row;
+            const rowWidth = hSpacing * pegsInRow;
+            const startX = (width - rowWidth) / 2 + hSpacing / 2;
+            const y = vSpacing * row + 80;
+
+            for (let col = 0; col < pegsInRow; col++) {
+              const x = startX + col * hSpacing;
+
+              const peg = Bodies.circle(x, y, pegRadius, {
+                isStatic: true,
+                render: { fillStyle: "#95a5a6" },
+                label: "peg",
+              });
+
+              World.add(engine.world, peg);
+            }
+          }
+        } else if (type === "diamond") {
+          const totalRows = 15;
+          const vSpacing = height / (totalRows + 4);
+          const hSpacing = width / (totalRows + 1);
+
+          for (let row = 0; row < totalRows; row++) {
+            const middle = Math.floor(totalRows / 2);
+            const pegsInRow = row <= middle ? row + 1 : totalRows - row;
+            const rowWidth = hSpacing * pegsInRow;
+            const startX = (width - rowWidth) / 2 + hSpacing / 2;
+            const y = vSpacing * row + 80;
+
+            for (let col = 0; col < pegsInRow; col++) {
+              const x = startX + col * hSpacing;
+
+              const peg = Bodies.circle(x, y, pegRadius, {
+                isStatic: true,
+                render: { fillStyle: "#95a5a6" },
+                label: "peg",
+              });
+
+              World.add(engine.world, peg);
+            }
+          }
+        } else if (type == "custom") {
+          document.oncontextmenu = (e) => {
+            e.preventDefault();
+            const { x, y } = {
+              x: e.clientX,
+              y: e.clientY,
+            };
+            if (x < 0 || x > width || y < 0 || y > height) {
+              return alert("Invalid position for peg.");
+            }
+            const pegRadius = Math.max(5, Math.min(12, width / 100));
+            const peg = Matter.Bodies.circle(x, y, pegRadius, {
+              isStatic: true,
+              render: { fillStyle: "#95a5a6" },
+              label: "cpeg",
+            });
+            if (engine && engine.world) {
+              Matter.World.add(engine.world, peg);
+            } else {
+              alert("Engine not initialized.");
+            }
+          };
+        } else if (type === "circle") {
+          const pegCount = 60;
+          const radius = Math.min(width, height) / 3;
+          const holeChance = 0.15; // 15% chance to skip a peg and create a "hole"
+
+          // Create a composite to hold all pegs as one unit
+          const pegComposite = Matter.Composite.create({ label: "pegCircle" });
+
+          for (let i = 0; i < pegCount; i++) {
+            if (Math.random() < holeChance) continue; // skip this peg to make a hole
+
+            const angle = (i / pegCount) * 2 * Math.PI;
+            const x = radius * Math.cos(angle);
+            const y = radius * Math.sin(angle);
+
+            const peg = Bodies.circle(x, y, pegRadius, {
+              isStatic: true,
+              render: { fillStyle: "#95a5a6" },
+              label: "peg",
+            });
+
+            Matter.Composite.add(pegComposite, peg);
+          }
+
+          // Add the composite to the world at the center position
+          Matter.Composite.translate(pegComposite, { x: centerX, y: centerY });
+          World.add(engine.world, pegComposite);
+
+          // Add rotation animation
+          const rotationSpeed = 0.005; // Adjust speed as needed
+          Events.on(engine, "beforeUpdate", function () {
+            Matter.Composite.rotate(pegComposite, rotationSpeed, {
+              x: centerX,
+              y: centerY,
+            });
+          });
+        } else if (type === "moving-rect") {
+          // Moving rectangle grid
+          const rows = 14,
+            cols = 13;
+          const vSpacing = height / (rows + 4);
+          const hSpacing = width / (cols + 1.5);
+
+          // Create a composite to hold all pegs for efficient manipulation
+          const pegComposite = Matter.Composite.create({ label: "pegGrid" });
+
+          for (let row = 0; row < rows; row++) {
+            const offset = row % 2 === 0 ? hSpacing / 2 : 0;
+
+            for (let col = 0; col < cols; col++) {
+              const x = hSpacing * (col + 1) + offset;
+              const y = vSpacing * row + 80;
+
+              const peg = Bodies.circle(x, y, pegRadius, {
+                isStatic: true,
+                render: { fillStyle: "#95a5a6" },
+                label: "peg",
+              });
+
+              Matter.Composite.add(pegComposite, peg);
+            }
+          }
+
+          // Add the composite to the world
+          World.add(engine.world, pegComposite);
+
+          // Use requestAnimationFrame for smoother animation
+          let moveDistance = 0;
+          const maxMove = 50;
+          let direction = 1;
+
+          // Use the Matter.js event system for better performance
+          Events.on(engine, "beforeUpdate", function () {
+            if (!pegComposite) return;
+
+            // Move the entire composite at once
+            Matter.Composite.translate(pegComposite, {
+              x: direction * 1,
+              y: 0,
+            });
+
+            moveDistance += direction;
+
+            // Change direction when reaching limits
+            if (Math.abs(moveDistance) >= maxMove) {
+              direction *= -1;
+            }
+          });
+        } else {
+          const rows = 14,
+            cols = 13;
+          const vSpacing = height / (rows + 4);
+          const hSpacing = width / (cols + 1.5);
+
+          for (let row = 0; row < rows; row++) {
+            const offset = row % 2 === 0 ? hSpacing / 2 : 0;
+
+            for (let col = 0; col < cols; col++) {
+              const x = hSpacing * (col + 1) + offset;
+              const y = vSpacing * row + 80;
+
+              const peg = Bodies.circle(x, y, pegRadius, {
+                isStatic: true,
+                render: { fillStyle: "#95a5a6" },
+                label: "peg",
+              });
+
+              World.add(engine.world, peg);
+            }
+          }
+        }
+
+        // Collision events
+        Events.on(engine, "collisionStart", (event) => {
+          const pairs = event.pairs;
+
+          pairs.forEach((pair) => {
+            const a = pair.bodyA;
+            const b = pair.bodyB;
+
+            const ball = a.label.startsWith("ball")
+              ? a
+              : b.label.startsWith("ball")
+              ? b
+              : null;
+            const other = ball === a ? b : a;
+
+            if (!ball || ball.hasScored) return;
+
+            // Ball hits a bucket
+            if (other.label.startsWith("bucket")) {
+              const bucketIndex = parseInt(other.label.replace("bucket", ""));
+              const bucketVal = vals[bucketIndex];
+              const ballWorth = parseInt(ball.label.replace("ball", "")) || 1;
+              const payout = Math.ceil(ballWorth * bucketVal);
+
+              if (isNaN(payout)) {
+                showPopup(
+                  "Error calculating payout. Please try again. Worth: " +
+                    ballWorth +
+                    " bucketVal: " +
+                    bucketVal
+                );
+                return;
+              }
+
+              ball.hasScored = true;
+              score += payout;
+              bestScore = Math.max(score, bestScore);
+              localStorage.setItem("score", score);
+              localStorage.setItem("bestScore", bestScore);
+
+              updateUI();
+              showPopup(`💰 You won $${addCommas(payout)}!`);
+              Matter.World.remove(engine.world, ball);
+              resetDrop();
+            }
+
+            // Ball hits the ground
+            if (other.label === "ground") {
+              ball.hasScored = true;
+              showPopup(`💸 You lost! The ball missed a bucket.`);
+              Matter.World.remove(engine.world, ball);
+              resetDrop();
+            }
+          });
+        });
+      }
+
+      function updateUI() {
+        document.getElementById("score-value").innerText = addCommas(score);
+        document.getElementById("best-score-value").innerText =
+          addCommas(bestScore);
+      }
+
+      function showPopup(msg) {
+        const popup = document.querySelector("#alert");
+        popup.querySelector(".popup-content").innerText = msg;
+        popup.style.display = "block";
+        popup.classList.remove("fade");
+        void popup.offsetWidth;
+        popup.classList.add("fade");
+        setTimeout(() => (popup.style.display = "none"), 2000);
+      }
+
+      function releasePlinkoBall(x, y, worthOverride) {
+        const ballWorth =
+          parseInt(worthOverride) ||
+          parseInt(document.getElementById("ball-worth").value) ||
+          10;
+
+        console.log(
+          "Releasing ball with worth:",
+          ballWorth,
+          "override:",
+          worthOverride
+        );
+
+        x += Math.floor(Math.random() * 20) - 5;
+
+        if (x < 0 || x > width) {
+          return alert(
+            "Invalid X position for the ball. Please click within the canvas."
+          );
+        }
+
+        if (isNaN(ballWorth) || ballWorth <= 0)
+          return alert("Invalid ball worth.");
+        if (ballWorth > score && !allowNeg) return;
+
+        const isMobileSized = width <= 600;
+
+        const ball = Matter.Bodies.polygon(
+          x,
+          y,
+          parseInt(document.getElementById("ball-sides").value) || 0,
+          Math.max(5, Math.min(12, width / 100)),
+          {
+            restitution:
+              parseInt(document.getElementById("restitution").value) || 1, // Bounciness of the ball
+            frictionAir: 0.05,
+            friction: 0.05,
+            density: ballWorth / 1000,
+            render: {
+              fillStyle: getColorForScore(ballWorth) || "#e74c3c",
+              strokeStyle: "#fff",
+              lineWidth: 1,
+            },
+            label: "ball" + ballWorth,
+          }
+        );
+
+        if (ballWorth == score) {
+          let hue = 0;
+          Matter.Events.on(engine, "beforeUpdate", () => {
+            hue = (hue + 1) % 360;
+            ball.render.fillStyle = `hsl(${hue}, 100%, 50%)`;
+            if (!ball) return;
+          });
+        } else if (ballWorth == score / 2) {
+          let pulseTime = 0;
+          Matter.Events.on(engine, "beforeUpdate", () => {
+            pulseTime += 0.05;
+
+            const lightness = 55 + Math.sin(pulseTime) * 10;
+
+            const hue = 37;
+
+            ball.render.fillStyle = `hsl(${hue}, 100%, ${lightness}%)`;
+          });
+        }
+
+        Matter.Events.on(engine, "beforeUpdate", () => {
+          const maxSpeed = 20;
+          const vx = Math.max(-maxSpeed, Math.min(ball.velocity.x, maxSpeed));
+          const vy = Math.max(-maxSpeed, Math.min(ball.velocity.y, maxSpeed));
+          Matter.Body.setVelocity(ball, { x: vx, y: vy });
+        });
+
+        score -= ballWorth;
+        updateUI();
+        Matter.World.add(engine.world, ball);
+      }
+
+      function resetDrop() {
+        canDrop = true;
+        if (dummyBall) dummyBall.style.opacity = "1";
+      }
+
+      // Mouse interaction
+      document.addEventListener("mousemove", (e) => {
+        if (nosel) {
+          // set the dummy ball to the center of the screen if nosel is checked
+          dummyBall = document.querySelector(".dummy-ball");
+          if (!dummyBall) {
+            dummyBall = document.createElement("div");
+            dummyBall.className = "dummy-ball";
+            document.body.appendChild(dummyBall);
+          }
+          dummyBall.style.left = `${window.innerWidth / 2}px`;
+          dummyBall.style.top = "50px"; // Keep it at a fixed height
+          // make the size of the pegs
+          dummyBall.style.width = `${
+            Math.max(5, Math.min(12, window.innerWidth / 100)) * 2
+          }px`;
+          dummyBall.style.height = dummyBall.style.width;
+          return; // Exit early if nosel is checked
+        }
+        if (!dummyBall) {
+          dummyBall = document.createElement("div");
+          dummyBall.className = "dummy-ball";
+          document.body.appendChild(dummyBall);
+        }
+
+        dummyBall.style.left = `${e.clientX}px`;
+        dummyBall.style.top = "50px";
+      });
+
+      document.addEventListener("click", (e) => {
+        if (
+          e.target.parentElement.id == "settings" ||
+          e.target.id == "settingsbutton" ||
+          e.target.id == "settings" ||
+          e.target.id == "allIn" ||
+          e.target.id == "50in"
+        ) {
+          return;
+        }
+        let x = e.clientX;
+        if (nosel) x = window.innerWidth / 2;
+        releasePlinkoBall(x, 50);
+        canDrop = false;
+        if (dummyBall) dummyBall.style.opacity = "0";
+        setTimeout(() => {
+          dummyBall.style.opacity = "1";
+          canDrop = true;
+        }, 200);
+      });
+
+      // Reset game
+      function resetGame() {
+        if (score < 0 && allowNeg) {
+          return alert(
+            "You cannot reset the game when you are in the negative"
+          );
+        }
+        if (confirm("Reset your game?")) {
+          localStorage.clear();
+          location.reload();
+        }
+      }
+
+      // Handle resize (full reset)
+      window.onresize = () => {
+        // Clear the current game state
+        if (engine) {
+          Matter.World.clear(engine.world, false);
+          Matter.Engine.clear(engine);
+          render.canvas.remove();
+          render = null;
+          engine = null;
+        }
+
+        document.querySelectorAll(".bucket-label").forEach((label) => {
+          label.remove();
+        });
+
+        // Re-setup the game
+        setupPlinko();
+      };
+
+      let holdInterval;
+      let isHolding = false;
+
+      function handleHold(e) {
+        const target = e.target;
+        if (
+          target.parentElement?.id === "settings" ||
+          target.id === "settingsbutton" ||
+          target.id === "settings" ||
+          target.id === "allIn" ||
+          target.id === "50in"
+        ) {
+          return;
+        }
+
+        isHolding = true;
+
+        let x = e.clientX || (e.touches && e.touches[0].clientX);
+        if (nosel) x = window.innerWidth / 2;
+
+        holdInterval = setInterval(() => {
+          if (!canDrop) return;
+
+          releasePlinkoBall(x, 50);
+          canDrop = false;
+
+          if (dummyBall) dummyBall.style.opacity = "0";
+
+          setTimeout(() => {
+            if (dummyBall) dummyBall.style.opacity = "1";
+            canDrop = true;
+          }, 200);
+        }, 200);
+      }
+
+      function stopHold() {
+        isHolding = false;
+        clearInterval(holdInterval);
+      }
+
+      document.addEventListener("mousedown", handleHold);
+      document.addEventListener("mouseup", stopHold);
+
+      document.addEventListener("touchstart", handleHold);
+      document.addEventListener("touchend", stopHold);
+
+      window.onload = setupPlinko;
+    </script>
+  </head>
+</html>
